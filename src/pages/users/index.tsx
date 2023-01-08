@@ -5,6 +5,7 @@ import {
   Flex,
   Heading,
   Icon,
+  Link,
   Spinner,
   Table,
   Tbody,
@@ -15,13 +16,17 @@ import {
   Tr,
   useBreakpointValue,
 } from '@chakra-ui/react'
-import Link from 'next/link'
-import { useEffect } from 'react'
+import { GetServerSideProps } from 'next'
+import NextLink from 'next/link'
+import { useEffect, useState } from 'react'
 import { RiAddLine, RiPencilLine } from 'react-icons/ri'
 import { Header } from '../../components/Header'
 import { Pagination } from '../../components/Pagination'
 import { Sidebar } from '../../components/Sidebar'
-import { useQuery } from '@tanstack/react-query'
+import { api } from '../../lib/axios'
+import { queryClient } from '../../lib/react-query'
+
+import { getUsers, useUsers } from '../../services/hookies/useUsers'
 
 interface User {
   id: number
@@ -30,23 +35,10 @@ interface User {
   created_at: string
 }
 
-export default function UserList() {
-  const { data, isLoading, error } = useQuery(['users'], async () => {
-    const response = await fetch('http://localhost:3000/api/users')
-    const data = await response.json()
-    const users = data.users.map((user: User) => {
-      return {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        created_at: new Date(user.created_at).toLocaleDateString('pt-BR', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        }),
-      }
-    })
-    return users
+export default function UserList({ users }) {
+  const [page, setPage] = useState(1)
+  const { data, isLoading, isFetching, error } = useUsers(page, {
+    initialData: users,
   })
 
   const isWideVersion = useBreakpointValue({
@@ -54,6 +46,18 @@ export default function UserList() {
     lg: false,
   })
 
+  async function handlePrefechUser(userId: number) {
+    await queryClient.prefetchQuery(
+      ['user', userId],
+      async () => {
+        const response = await api.get(`users/${userId}`)
+        return response.data
+      },
+      {
+        staleTime: 1000 * 60 * 10, // 10 minutos
+      },
+    )
+  }
   // useEffect(() => {
   //   fetch('http://localhost:3000/api/users')
   //     .then((response) => response.json())
@@ -68,8 +72,11 @@ export default function UserList() {
           <Flex mb="8" justify="space-between" align="center">
             <Heading size="lg" fontWeight="normal">
               Usuários
+              {!isLoading && isFetching && (
+                <Spinner size="sm" color="gray.500" ml="4" />
+              )}
             </Heading>
-            <Link href="/users/create" passHref>
+            <NextLink href="/users/create" passHref>
               <Button
                 as="a"
                 fontSize="20"
@@ -79,7 +86,7 @@ export default function UserList() {
               >
                 Criar novo
               </Button>
-            </Link>
+            </NextLink>
           </Flex>
 
           {isLoading ? (
@@ -104,7 +111,7 @@ export default function UserList() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {data.map((user: User) => {
+                  {data.users.map((user) => {
                     return (
                       <Tr key={user.id}>
                         <Td px={['4', '4', '6']}>
@@ -112,7 +119,13 @@ export default function UserList() {
                         </Td>
                         <Td>
                           <Box>
-                            <Text fontWeight="bold">{user.name}</Text>
+                            <Link
+                              color="purple.400"
+                              onMouseEnter={() => handlePrefechUser(user.id)}
+                            >
+                              <Text fontWeight="bold">{user.name}</Text>
+                            </Link>
+
                             <Text fontSize="sm" color="gray.300">
                               {user.email}
                             </Text>
@@ -135,11 +148,24 @@ export default function UserList() {
                   })}
                 </Tbody>
               </Table>
-              <Pagination />
+              <Pagination
+                totalCountOfRegisters={data.totalCount}
+                currentPage={page}
+                onPageChange={setPage}
+              />
             </>
           )}
         </Box>
       </Flex>
     </Box>
   )
+}
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const { users, totalCount } = await getUsers(1)
+  return {
+    props: {
+      users,
+    },
+  }
 }
