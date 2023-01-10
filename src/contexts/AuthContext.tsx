@@ -1,7 +1,8 @@
 import { createContext, ReactNode, useEffect, useState } from 'react'
 import Router from 'next/router'
-import { authClient } from '../lib/axiosAuthentication'
+import { setupApiClient } from '../lib/axiosAuthentication'
 import { setCookie, parseCookies, destroyCookie } from 'nookies'
+import { authClient } from '../services/apiClient'
 
 export type User = {
   email: string
